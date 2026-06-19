@@ -1,98 +1,84 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
-  }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
-  return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
-  );
-}
+import { useEffect, useState } from 'react';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../supabase';
 
 export default function HomeScreen() {
+  const [polls, setPolls] = useState<any[]>([]);
+  const [votedPolls, setVotedPolls] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetchPolls();
+  }, []);
+
+  async function fetchPolls() {
+    const { data, error } = await supabase
+      .from('polls')
+      .select('*, options(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) console.log('Fetch error:', error);
+    else setPolls(data);
+  }
+
+  async function handleVote(pollId: string, optionId: string) {
+    if (votedPolls[pollId]) return;
+
+    setVotedPolls((prev) => ({ ...prev, [pollId]: optionId }));
+
+    const { error } = await supabase.rpc('increment_vote', {
+      option_id_input: optionId,
+    });
+
+    if (error) {
+      console.log('Vote error:', error);
+      return;
+    }
+
+    fetchPolls();
+  }
+
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <View style={styles.container}>
+      <Text style={styles.header}>🗳️ Trending Polls</Text>
+      <FlatList
+        data={polls}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => {
+          const hasVoted = !!votedPolls[item.id];
+          return (
+            <View style={styles.pollCard}>
+              <Text style={styles.question}>{item.question}</Text>
+              <Text style={styles.category}>#{item.category} · {item.country_code}</Text>
+              {item.options.map((option: any) => {
+                const isSelected = votedPolls[item.id] === option.id;
+                return (
+                  <TouchableOpacity
+                    key={option.id}
+                    style={[styles.option, isSelected && styles.optionSelected]}
+                    onPress={() => handleVote(item.id, option.id)}
+                    disabled={hasVoted}
+                  >
+                    <Text style={styles.optionText}>
+                      {option.text} {hasVoted ? `· ${option.vote_count} votes` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          );
+        }}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
-  },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  container: { flex: 1, backgroundColor: '#0f0f0f', padding: 16, paddingTop: 60 },
+  header: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', marginBottom: 20 },
+  pollCard: { backgroundColor: '#1a1a1a', borderRadius: 12, padding: 16, marginBottom: 16 },
+  question: { fontSize: 16, fontWeight: '600', color: '#ffffff', marginBottom: 8 },
+  category: { fontSize: 12, color: '#888', marginBottom: 12 },
+  option: { backgroundColor: '#2a2a2a', borderRadius: 8, padding: 12, marginBottom: 8 },
+  optionSelected: { backgroundColor: '#3a5fcd' },
+  optionText: { color: '#ffffff', fontSize: 14 },
 });
