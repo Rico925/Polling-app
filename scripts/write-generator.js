@@ -1,0 +1,1 @@
+require('fs').writeFileSync('scripts/poll-generator.js', "require('dotenv').config({ path: '.env.local' });\nconsole.log('File works!');\n");

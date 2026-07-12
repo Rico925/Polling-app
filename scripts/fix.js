@@ -1,0 +1,1 @@
+const fs=require('fs');const c=fs.readFileSync('scripts/pipeline.js','utf8');fs.writeFileSync('scripts/pipeline.js',c.slice(c.indexOf('require("dotenv")')).trim(),'utf8');console.log('Fixed!');
